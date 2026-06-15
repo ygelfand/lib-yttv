@@ -1,0 +1,9 @@
+.secrets/
+*.env
+/tmp/
+.DS_Store
+.idea/
+.vscode/
+*.test
+*.out
+coverage.*
