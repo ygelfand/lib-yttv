@@ -1,6 +1,6 @@
 // Package epg parses the FEunplugged_epg Innertube response into a flat
-// channel list and resolves per-airing videoIds (what EPG returns) to live
-// channel videoIds (what the Chromecast receiver can actually play).
+// channel list, each carrying the live channel videoId the Chromecast receiver
+// can actually play.
 package epg
 
 import (
@@ -14,23 +14,33 @@ import (
 
 const epgBrowseID = "FEunplugged_epg"
 
-// Channel is one row of the EPG. The Current* and PerAiringVideoID fields
-// describe the currently-airing program; Airings is the full schedule.
+// Channel is one row of the EPG. The Current* and LiveVideoID fields describe
+// the currently-airing program; Airings is the full schedule.
 type Channel struct {
-	Name             string
-	StationIconURL   string
-	PerAiringVideoID string // NOT directly playable; resolve via ResolveLiveVideoID
-	ClickTracking    string
-	CurrentTitle     string
-	Airings          []Airing
+	Name           string
+	StationIconURL string
+	LiveVideoID    string
+	ClickTracking  string
+	CurrentTitle   string
+	Airings        []Airing
 }
 
-// Airing is one scheduled program. VideoID is the per-airing videoId — resolve
-// to a live channel videoId via ResolveLiveVideoID before casting.
+// LiveThumbnailURL is a current frame of the live broadcast (vs the static
+// program art in Airing.ThumbnailURL). Empty if LiveVideoID is unknown.
+func (c Channel) LiveThumbnailURL() string {
+	if c.LiveVideoID == "" {
+		return ""
+	}
+	return "https://i.ytimg.com/vi/" + c.LiveVideoID + "/maxresdefault_live.jpg"
+}
+
+// Airing is one scheduled program. VideoID is the per-airing videoId (not
+// playable); LiveVideoID is the live channel videoId to cast.
 type Airing struct {
 	BeginTimeMs   int64
 	EndTimeMs     int64
 	VideoID       string
+	LiveVideoID   string // navigationEndpoint.watchEndpoint.videoId; playable
 	Title         string
 	Subtitle      string
 	Synopsis      string
@@ -79,6 +89,7 @@ func Fetch(ctx context.Context, c *innertube.Client) ([]Channel, error) {
 				BeginTimeMs:   begin,
 				EndTimeMs:     end,
 				VideoID:       vid,
+				LiveVideoID:   ar.Get("navigationEndpoint.watchEndpoint.videoId").String(),
 				Title:         ar.Get("title.runs.0.text").String(),
 				Subtitle:      ar.Get("subtitle.runs.0.text").String(),
 				Synopsis:      ar.Get("quaternaryText.runs.0.text").String(),
@@ -88,41 +99,19 @@ func Fetch(ctx context.Context, c *innertube.Client) ([]Channel, error) {
 			}
 			ch.Airings = append(ch.Airings, airing)
 			if airing.IsLive {
-				ch.PerAiringVideoID = airing.VideoID
+				ch.LiveVideoID = airing.LiveVideoID
 				ch.ClickTracking = airing.ClickTracking
 				ch.CurrentTitle = airing.Title
 			}
 			return true
 		})
-		if ch.PerAiringVideoID == "" {
+		if ch.LiveVideoID == "" {
 			return true
 		}
 		out = append(out, ch)
 		return true
 	})
 	return out, nil
-}
-
-// ResolveLiveVideoID asks /youtubei/v1/next for the live channel videoId that
-// the given per-airing videoId redirects to. Returns the original ID if no
-// distinct redirect target is present.
-func ResolveLiveVideoID(ctx context.Context, c *innertube.Client, perAiringVideoID string) (string, error) {
-	raw, err := c.Next(ctx, perAiringVideoID)
-	if err != nil {
-		return "", err
-	}
-	live := ""
-	gjson.GetBytes(raw, "onResponseReceivedEndpoints.#.watchEndpoint.videoId").ForEach(func(_, v gjson.Result) bool {
-		if s := v.String(); s != "" && s != perAiringVideoID {
-			live = s
-			return false
-		}
-		return true
-	})
-	if live == "" {
-		return perAiringVideoID, nil
-	}
-	return live, nil
 }
 
 func firstNonEmpty(vals ...string) string {

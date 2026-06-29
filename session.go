@@ -53,13 +53,7 @@ func (s *Session) Cast(ctx context.Context, dev cast.Device, channelName string)
 	if ch == nil {
 		return fmt.Errorf("channel %q not found", channelName)
 	}
-	slog.InfoContext(ctx, "matched channel", "name", ch.Name, "per_airing", ch.PerAiringVideoID)
-
-	liveID, err := epg.ResolveLiveVideoID(ctx, s.Innertube, ch.PerAiringVideoID)
-	if err != nil {
-		return fmt.Errorf("resolve live videoId: %w", err)
-	}
-	slog.InfoContext(ctx, "resolved live videoId", "video_id", liveID)
+	slog.InfoContext(ctx, "matched channel", "name", ch.Name, "video_id", ch.LiveVideoID)
 
 	connCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -89,7 +83,7 @@ func (s *Session) Cast(ctx context.Context, dev cast.Device, channelName string)
 	}
 	slog.InfoContext(ctx, "bound", "sid", sess.SID, "gsessionid", sess.GSessionID)
 
-	if err := sess.SetPlaylist(ctx, liveID, ch.ClickTracking); err != nil {
+	if err := sess.SetPlaylist(ctx, ch.LiveVideoID, ch.ClickTracking); err != nil {
 		return fmt.Errorf("setPlaylist: %w", err)
 	}
 	slog.InfoContext(ctx, "setPlaylist sent")

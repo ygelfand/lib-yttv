@@ -34,6 +34,6 @@ func main() {
 		os.Exit(1)
 	}
 	for _, c := range chs {
-		fmt.Printf("%-20s  %s  %s\n", c.Name, c.PerAiringVideoID, c.CurrentTitle)
+		fmt.Printf("%-20s  %s  %s\n", c.Name, c.LiveVideoID, c.CurrentTitle)
 	}
 }
