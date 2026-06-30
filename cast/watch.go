@@ -104,8 +104,25 @@ func (r *Receiver) stream(ctx context.Context, onStatus func(*Status)) error {
 			}
 			onStatus(cloneStatus(cur))
 		case nsMedia:
+			// Cast sends one full MEDIA_STATUS then incremental updates with no
+			// media block; merge so playerState changes don't wipe the metadata.
 			if md := parseMedia(m.GetPayloadUtf8()); md != nil {
-				cur.Media = md
+				if cur.Media == nil {
+					cur.Media = &Media{}
+				}
+				cur.Media.PlayerState = md.PlayerState
+				cur.Media.CurrentTime = md.CurrentTime
+				if md.MediaSessionID != 0 {
+					cur.Media.MediaSessionID = md.MediaSessionID
+				}
+				if md.ContentID != "" { // a media block was present
+					cur.Media.ContentID = md.ContentID
+					cur.Media.Title = md.Title
+					cur.Media.Subtitle = md.Subtitle
+					cur.Media.ImageURL = md.ImageURL
+					cur.Media.StreamType = md.StreamType
+					cur.Media.Duration = md.Duration
+				}
 				onStatus(cloneStatus(cur))
 			}
 		}
